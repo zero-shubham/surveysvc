@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  surveysvc-db:
+    image: postgres:17
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=datab
+    ports:
+      - '5432:5432'
+
+  surveysvc:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+    ports:
+      - '50052:50052'
+      - '50053:50053'
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@surveysvc-db:5432/datab
+    volumes:
+      - app-vol:/root
+      - type: bind
+        source: './'
+        target: '/surveysvc'
+    depends_on:
+      - surveysvc-db
+volumes:
+  postgres_data:
+  app-vol:
