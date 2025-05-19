@@ -19,10 +19,16 @@ RETURNING *;
 
 -- name: GetAnswersByQuestionID :many
 SELECT id, selected_option, answer_text, user_id, question_id, question_set_id, created_at, updated_at
-FROM answers WHERE question_id = $1;
+FROM answers 
+WHERE question_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;
 
 -- name: GetQuestionMappingsByCampaignID :many
-SELECT * FROM question_mappings WHERE campaign_id = $1;
+SELECT * FROM question_mappings 
+WHERE campaign_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;
 
 -- name: UpdateQuestionMappingsByID :one
 UPDATE question_mappings

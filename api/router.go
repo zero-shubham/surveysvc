@@ -45,7 +45,7 @@ func (r *Router) Start(ctx context.Context) {
 
 	go func() {
 		// Create context that listens for the interrupt signal from the OS.
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 		defer stop()
 
 		srv := &http.Server{

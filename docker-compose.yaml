@@ -1,6 +1,12 @@
 version: '3.8'
 
 services:
+  surveysvc-kafka:
+    image: apache/kafka:4.0.0
+    volumes:
+      - kafka-data:/tmp
+    ports:
+      - '9092:9092'
   surveysvc-db:
     image: postgres:17
     volumes:
@@ -32,3 +38,4 @@ services:
 volumes:
   postgres_data:
   app-vol:
+  kafka-data:

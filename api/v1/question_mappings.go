@@ -19,9 +19,6 @@ func (svc *ApiV1Service) CreateQuestionMapping(c *gin.Context) {
 	orm := db.New(svc.conn)
 	var in CreateQuestionMappingBody
 
-	// fmt.Println("all okay")
-	// body, _ := io.ReadAll(c.Request.Body)
-	// svc.logger.Info().Interface("body", string(body)).Msg("in request")
 	err := c.BindJSON(&in)
 	if err != nil {
 		svc.logger.Err(err).Msg("failed to parse request body")
@@ -37,6 +34,81 @@ func (svc *ApiV1Service) CreateQuestionMapping(c *gin.Context) {
 	if err != nil {
 		svc.logger.Err(err).Msg("failed to create question_mapping")
 		c.AbortWithError(http.StatusInternalServerError, errors.New("somethign went wrong"))
+	}
+
+	c.JSON(http.StatusOK, qm)
+}
+
+type GetQuestionMappingsQuery struct {
+	CampaignID uuid.UUID `form:"campaign_id" binding:"required"`
+	Limit      int       `form:"limit"`
+	Offset     int       `form:"offset"`
+}
+
+func (svc *ApiV1Service) GetQuestionMappings(c *gin.Context) {
+	var query GetQuestionMappingsQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		svc.logger.Err(err).Msg("invalid query parameters")
+		c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
+		return
+	}
+
+	if query.Limit == 0 {
+		query.Limit = 10
+	}
+
+	orm := db.New(svc.conn)
+	mappings, err := orm.GetQuestionMappingsByCampaignID(c.Request.Context(), db.GetQuestionMappingsByCampaignIDParams{
+		CampaignID: query.CampaignID,
+		Limit:      int32(query.Limit),
+		Offset:     int32(query.Offset),
+	})
+	if err != nil {
+		svc.logger.Err(err).Msg("failed to get question mappings")
+		c.AbortWithError(http.StatusInternalServerError, errors.New("something went wrong"))
+		return
+	}
+
+	c.JSON(http.StatusOK, mappings)
+}
+
+type UpdateQuestionMappingURI struct {
+	ID uuid.UUID `uri:"id" binding:"required"`
+}
+
+type UpdateQuestionMappingBody struct {
+	QuestionID uuid.UUID `json:"question_id" binding:"required"`
+	CampaignID uuid.UUID `json:"campaign_id" binding:"required"`
+	OrgID      uuid.UUID `json:"org_id" binding:"required"`
+}
+
+func (svc *ApiV1Service) UpdateQuestionMapping(c *gin.Context) {
+	orm := db.New(svc.conn)
+
+	var uri UpdateQuestionMappingURI
+	if err := c.ShouldBindUri(&uri); err != nil {
+		svc.logger.Err(err).Msg("invalid URI parameters")
+		c.AbortWithError(http.StatusBadRequest, errors.New("invalid question mapping ID"))
+		return
+	}
+
+	var in UpdateQuestionMappingBody
+	if err := c.BindJSON(&in); err != nil {
+		svc.logger.Err(err).Msg("failed to parse request body")
+		c.AbortWithError(http.StatusBadRequest, errors.New("bad request body"))
+		return
+	}
+
+	qm, err := orm.UpdateQuestionMappingsByID(c.Request.Context(), db.UpdateQuestionMappingsByIDParams{
+		ID:         uri.ID,
+		QuestionID: in.QuestionID,
+		CampaignID: in.CampaignID,
+		OrgID:      in.OrgID,
+	})
+	if err != nil {
+		svc.logger.Err(err).Msg("failed to update question_mapping")
+		c.AbortWithError(http.StatusInternalServerError, errors.New("something went wrong"))
+		return
 	}
 
 	c.JSON(http.StatusOK, qm)

@@ -84,11 +84,20 @@ func (q *Queries) CreateQuestionMapping(ctx context.Context, arg CreateQuestionM
 
 const getAnswersByQuestionID = `-- name: GetAnswersByQuestionID :many
 SELECT id, selected_option, answer_text, user_id, question_id, question_set_id, created_at, updated_at
-FROM answers WHERE question_id = $1
+FROM answers 
+WHERE question_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
 `
 
-func (q *Queries) GetAnswersByQuestionID(ctx context.Context, questionID uuid.UUID) ([]Answer, error) {
-	rows, err := q.db.Query(ctx, getAnswersByQuestionID, questionID)
+type GetAnswersByQuestionIDParams struct {
+	QuestionID uuid.UUID
+	Limit      int32
+	Offset     int32
+}
+
+func (q *Queries) GetAnswersByQuestionID(ctx context.Context, arg GetAnswersByQuestionIDParams) ([]Answer, error) {
+	rows, err := q.db.Query(ctx, getAnswersByQuestionID, arg.QuestionID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -117,11 +126,20 @@ func (q *Queries) GetAnswersByQuestionID(ctx context.Context, questionID uuid.UU
 }
 
 const getQuestionMappingsByCampaignID = `-- name: GetQuestionMappingsByCampaignID :many
-SELECT id, question_id, campaign_id, org_id, created_at, updated_at FROM question_mappings WHERE campaign_id = $1
+SELECT id, question_id, campaign_id, org_id, created_at, updated_at FROM question_mappings 
+WHERE campaign_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
 `
 
-func (q *Queries) GetQuestionMappingsByCampaignID(ctx context.Context, campaignID uuid.UUID) ([]QuestionMapping, error) {
-	rows, err := q.db.Query(ctx, getQuestionMappingsByCampaignID, campaignID)
+type GetQuestionMappingsByCampaignIDParams struct {
+	CampaignID uuid.UUID
+	Limit      int32
+	Offset     int32
+}
+
+func (q *Queries) GetQuestionMappingsByCampaignID(ctx context.Context, arg GetQuestionMappingsByCampaignIDParams) ([]QuestionMapping, error) {
+	rows, err := q.db.Query(ctx, getQuestionMappingsByCampaignID, arg.CampaignID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,6 @@
+FROM migrate/migrate
+
+RUN mkdir -p /tmp/migrations
+RUN mkdir -p /tmp/seeds
+
+COPY ./db/migrations /tmp/
