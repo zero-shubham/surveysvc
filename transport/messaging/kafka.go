@@ -2,119 +2,142 @@ package messaging
 
 import (
 	"context"
-	"log"
-	"os"
-	"os/signal"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
-type HandlerFunc func(*kafka.Message) error
-type KafkaHandler struct {
-	readers    []*kafka.Reader
-	handler    HandlerFunc
-	deadletter *kafka.Writer
-	logger     *zerolog.Logger
-	topic      string
+type HandlerFunc func(context.Context, *kafka.Message) error
+type KafkaConsumer struct {
+	reader      *kafka.Reader
+	handler     HandlerFunc
+	deadletter  *kafka.Writer
+	logger      *zerolog.Logger
+	topic       string
+	messageChan chan *kafka.Message
+	trace       trace.Tracer
 }
 
-func NewKafkaHandler(
+func NewKafkaConsumer(
 	brokers []string,
 	topic string,
-	consumerGroupIDs []string,
+	consumerGroupID string,
 	handler HandlerFunc,
 	deadletterTopic string,
 	logger *zerolog.Logger,
-) *KafkaHandler {
-	readers := make([]*kafka.Reader, len(consumerGroupIDs))
+	workerCount int,
+	tp *sdktrace.TracerProvider,
+) *KafkaConsumer {
 
-	for _, groupID := range consumerGroupIDs {
-		readers = append(readers, kafka.NewReader(kafka.ReaderConfig{
+	return &KafkaConsumer{
+		reader: kafka.NewReader(kafka.ReaderConfig{
 			Brokers:  brokers,
 			Topic:    topic,
-			GroupID:  groupID,
+			GroupID:  consumerGroupID,
 			MaxBytes: 10e6,
-		}))
-	}
-
-	return &KafkaHandler{
-		readers: readers,
+		}),
 		handler: handler,
 		deadletter: kafka.NewWriter(kafka.WriterConfig{
 			Brokers:  brokers,
 			Topic:    deadletterTopic,
 			Balancer: &kafka.LeastBytes{},
 		}),
-		logger: logger,
-		topic:  topic,
+		logger:      logger,
+		topic:       topic,
+		messageChan: make(chan *kafka.Message, workerCount),
+		trace:       tp.Tracer("surveysvc-consumer"),
 	}
+
 }
 
-func (kh *KafkaHandler) Start(ctx context.Context) {
+func (kh *KafkaConsumer) Start(ctx context.Context) {
 
-	for id := range kh.readers {
-		go kh.WorkerStart(ctx, id)
+	for i := 0; i < len(kh.messageChan); i++ {
+		go kh.workerStart(ctx)
 	}
+
+	go func() {
+		kh.logger.Info().Str("topic", kh.topic).Msg("starting consumer")
+		for {
+			select {
+			case <-ctx.Done():
+				kh.logger.Info().Str("topic", kh.topic).Msg("stopping kafka handler")
+				kh.Stop()
+				return
+
+			default:
+				ctx, span := kh.trace.Start(ctx, "fetch-answers")
+				m, err := kh.reader.FetchMessage(ctx)
+				if err != nil {
+					kh.logger.Err(err).Msg("failed to fetch messages")
+					continue
+				}
+
+				for _, header := range m.Headers {
+					span.SetAttributes(attribute.KeyValue{
+						Key:   attribute.Key(header.Key),
+						Value: attribute.StringValue(string(header.Value)),
+					})
+				}
+
+				kh.messageChan <- &m
+			}
+		}
+	}()
 }
 
-func (kh *KafkaHandler) Stop(stop context.CancelFunc) {
+func (kh *KafkaConsumer) Stop() {
 	err := kh.deadletter.Close()
 	if err != nil {
 		kh.logger.Err(err).Msg("failed to close dead letter")
 	}
 
-	for _, reader := range kh.readers {
-		err := reader.Close()
-		if err != nil {
-			kh.logger.Err(err).Msg("failed to close reader")
-		}
+	err = kh.reader.Close()
+	if err != nil {
+		kh.logger.Err(err).Msg("failed to close reader")
 	}
 	kh.logger.Info().Msg("stopped kafka handler")
 }
 
-func (kh *KafkaHandler) WorkerStart(ctx context.Context, id int) {
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
-	defer kh.Stop(stop)
-
-	kh.logger.Info().Str("topic", kh.topic).Int("worker", id).Msg("starting worker consumer")
+func (kh *KafkaConsumer) workerStart(ctx context.Context) {
+	kh.logger.Info().Msg("starting consumer worker")
 	for {
 		select {
 		case <-ctx.Done():
-			kh.logger.Info().Str("topic", kh.topic).Msg("stopping kafka handler")
-			break
+			kh.logger.Info().Msg("shutting down consumer worker")
+			return
 
-		default:
-			m, err := kh.readers[id].FetchMessage(ctx)
-			if err != nil {
-				kh.logger.Err(err).Msg("failed to fetch messages")
-				break
-			}
-
-			err = ExponentialRetry(3, func() error {
-				return kh.handler(&m)
+		case m := <-kh.messageChan:
+			ctx, _ := kh.trace.Start(ctx, "process-answer")
+			err := ExponentialRetry(3, func() error {
+				return kh.handler(ctx, m)
 			})
 			if err != nil {
-				err = kh.deadletter.WriteMessages(ctx, m)
+				ctx, _ := kh.trace.Start(ctx, "dead-answer")
+				err = kh.deadletter.WriteMessages(ctx, *m)
 				if err != nil {
 					kh.logger.Err(err).Msg("error while wrtiging to dead leader")
 				}
 			}
 
-			if err := kh.readers[id].CommitMessages(ctx, m); err != nil {
-				log.Fatal("failed to commit messages:", err)
+			ctx, _ = kh.trace.Start(ctx, "commit-answer")
+			if err := kh.reader.CommitMessages(ctx, *m); err != nil {
+				kh.logger.Err(err).Msg("failed to commit messages")
 			}
-
 		}
 	}
+
 }
 
 func ExponentialRetry(maxRetry int, execute func() error) error {
 	counter := 1
 	var err error
 	for err = execute(); err != nil && counter < maxRetry; {
-		time.Sleep(time.Second * (time.Duration(counter + (2 * counter))))
+		time.Sleep(time.Second * (time.Duration(counter + (2 + counter))))
 		counter++
 	}
 	return err

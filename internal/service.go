@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"context"
+
 	"github.com/rs/zerolog"
 	"github.com/segmentio/kafka-go"
 	db "github.com/zero-shubham/surveysvc/db/orm"
@@ -18,6 +20,6 @@ func NewService(logger *zerolog.Logger, conn db.DBTX) *Service {
 	}
 }
 
-func (s *Service) HandleAnswer(message *kafka.Message) error {
-
+func (s *Service) HandleAnswer(ctx context.Context, message *kafka.Message) error {
+	return nil
 }

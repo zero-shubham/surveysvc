@@ -3,25 +3,32 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
-	"github.com/zero-shubham/surveysvc/api"
 	"github.com/zero-shubham/surveysvc/config"
+	"github.com/zero-shubham/surveysvc/internal"
+	"github.com/zero-shubham/surveysvc/transport/messaging"
 )
 
 const (
-	MaxIdelConn = 5
-	DbUrlEnv    = "DATABASE_URL"
+	MaxIdelConn           = 5
+	DbUrlEnv              = "DATABASE_URL"
+	KafkaBrokerEnv        = "KAFKA_BROKER_URI"
+	KafkaTopicConsumeEnv  = "KAFKA_CONSUMER_TOPIC"
+	KafkaDeadLetterEnv    = "KAFKA_DEADLETTER_TOPIC"
+	KafkaConsumerGroupEnv = "KAFKA_CONSUMER_GROUP"
 )
 
 func main() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer stop()
 
 	tp, err := config.Init()
 	if err != nil {
@@ -49,7 +56,19 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to create a config")
 	}
 
-	api.NewRouter(&log.Logger, dbConn).Start(ctx)
+	svc := internal.NewService(&log.Logger, dbConn)
+	consumer := messaging.NewKafkaConsumer(
+		[]string{os.Getenv(KafkaBrokerEnv)},
+		os.Getenv(KafkaTopicConsumeEnv),
+		os.Getenv(KafkaConsumerGroupEnv),
+		svc.HandleAnswer,
+		os.Getenv(KafkaDeadLetterEnv),
+		&log.Logger,
+		2,
+		tp,
+	)
+	consumer.Start(ctx)
+
 	<-ctx.Done()
 
 }
