@@ -45,6 +45,10 @@ type GetQuestionMappingsQuery struct {
 	Offset     int    `form:"offset"`
 }
 
+type GetQuestionMappingsResp struct {
+	QuestionMappings []db.QuestionMapping `json:"question_mappings"`
+}
+
 func (svc *ApiV1Service) GetQuestionMappings(c *gin.Context) {
 	var query GetQuestionMappingsQuery
 	if err := c.BindQuery(&query); err != nil {
@@ -76,7 +80,7 @@ func (svc *ApiV1Service) GetQuestionMappings(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, mappings)
+	c.JSON(http.StatusOK, GetQuestionMappingsResp{QuestionMappings: mappings})
 }
 
 type UpdateQuestionMappingURI struct {

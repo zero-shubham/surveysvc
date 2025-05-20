@@ -10,21 +10,21 @@ import (
 )
 
 type Answer struct {
-	ID             uuid.UUID
-	SelectedOption pgtype.Text
-	AnswerText     pgtype.Text
-	UserID         uuid.UUID
-	QuestionID     uuid.UUID
-	QuestionSetID  uuid.UUID
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID             uuid.UUID          `json:"id"`
+	SelectedOption pgtype.Text        `json:"selected_option"`
+	AnswerText     pgtype.Text        `json:"answer_text"`
+	UserID         uuid.UUID          `json:"user_id"`
+	QuestionID     uuid.UUID          `json:"question_id"`
+	QuestionSetID  uuid.UUID          `json:"question_set_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type QuestionMapping struct {
-	ID         uuid.UUID
-	QuestionID uuid.UUID
-	CampaignID uuid.UUID
-	OrgID      uuid.UUID
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
+	ID         uuid.UUID          `json:"id"`
+	QuestionID uuid.UUID          `json:"question_id"`
+	CampaignID uuid.UUID          `json:"campaign_id"`
+	OrgID      uuid.UUID          `json:"org_id"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }

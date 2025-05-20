@@ -27,11 +27,11 @@ VALUES
 `
 
 type CreateAnswerParams struct {
-	SelectedOption pgtype.Text
-	AnswerText     pgtype.Text
-	UserID         uuid.UUID
-	QuestionID     uuid.UUID
-	QuestionSetID  uuid.UUID
+	SelectedOption pgtype.Text `json:"selected_option"`
+	AnswerText     pgtype.Text `json:"answer_text"`
+	UserID         uuid.UUID   `json:"user_id"`
+	QuestionID     uuid.UUID   `json:"question_id"`
+	QuestionSetID  uuid.UUID   `json:"question_set_id"`
 }
 
 func (q *Queries) CreateAnswer(ctx context.Context, arg CreateAnswerParams) (Answer, error) {
@@ -63,9 +63,9 @@ RETURNING id, question_id, campaign_id, org_id, created_at, updated_at
 `
 
 type CreateQuestionMappingParams struct {
-	QuestionID uuid.UUID
-	CampaignID uuid.UUID
-	OrgID      uuid.UUID
+	QuestionID uuid.UUID `json:"question_id"`
+	CampaignID uuid.UUID `json:"campaign_id"`
+	OrgID      uuid.UUID `json:"org_id"`
 }
 
 func (q *Queries) CreateQuestionMapping(ctx context.Context, arg CreateQuestionMappingParams) (QuestionMapping, error) {
@@ -91,9 +91,9 @@ LIMIT $2 OFFSET $3
 `
 
 type GetAnswersByQuestionIDParams struct {
-	QuestionID uuid.UUID
-	Limit      int32
-	Offset     int32
+	QuestionID uuid.UUID `json:"question_id"`
+	Limit      int32     `json:"limit"`
+	Offset     int32     `json:"offset"`
 }
 
 func (q *Queries) GetAnswersByQuestionID(ctx context.Context, arg GetAnswersByQuestionIDParams) ([]Answer, error) {
@@ -133,9 +133,9 @@ LIMIT $2 OFFSET $3
 `
 
 type GetQuestionMappingsByCampaignIDParams struct {
-	CampaignID uuid.UUID
-	Limit      int32
-	Offset     int32
+	CampaignID uuid.UUID `json:"campaign_id"`
+	Limit      int32     `json:"limit"`
+	Offset     int32     `json:"offset"`
 }
 
 func (q *Queries) GetQuestionMappingsByCampaignID(ctx context.Context, arg GetQuestionMappingsByCampaignIDParams) ([]QuestionMapping, error) {
@@ -172,10 +172,10 @@ WHERE id = $1 RETURNING id, question_id, campaign_id, org_id, created_at, update
 `
 
 type UpdateQuestionMappingsByIDParams struct {
-	ID         uuid.UUID
-	CampaignID uuid.UUID
-	QuestionID uuid.UUID
-	OrgID      uuid.UUID
+	ID         uuid.UUID `json:"id"`
+	CampaignID uuid.UUID `json:"campaign_id"`
+	QuestionID uuid.UUID `json:"question_id"`
+	OrgID      uuid.UUID `json:"org_id"`
 }
 
 func (q *Queries) UpdateQuestionMappingsByID(ctx context.Context, arg UpdateQuestionMappingsByIDParams) (QuestionMapping, error) {
