@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/segmentio/kafka-go"
+	"github.com/zero-shubham/surveysvc/transport/tcp"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -32,7 +33,7 @@ func NewKafkaConsumer(
 	workerCount int,
 	tp *sdktrace.TracerProvider,
 ) *KafkaConsumer {
-
+	tracer := tp.Tracer("surveysvc-consumer")
 	return &KafkaConsumer{
 		reader: kafka.NewReader(kafka.ReaderConfig{
 			Brokers:  brokers,
@@ -45,11 +46,12 @@ func NewKafkaConsumer(
 			Brokers:  brokers,
 			Topic:    deadletterTopic,
 			Balancer: &kafka.LeastBytes{},
+			Dialer:   tcp.NewInstrumentedDialer(time.Second*30, time.Minute*60, tracer).Dialer,
 		}),
 		logger:      logger,
 		topic:       topic,
 		messageChan: make(chan *kafka.Message, workerCount),
-		trace:       tp.Tracer("surveysvc-consumer"),
+		trace:       tracer,
 	}
 
 }
