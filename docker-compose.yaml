@@ -43,7 +43,7 @@ services:
       - KAFKA_BROKER_URI=surveysvc-broker:9092
       - KAFKA_CONSUMER_TOPIC=surveyx-answers
       - KAFKA_DEADLETTER_TOPIC=surveyx-answers-dead
-      - KAFKA_CONSUMER_GROUP=surveyx-answers-consumer
+      - KAFKA_CONSUMER_GROUP=surveyx-answers-consumers
     volumes:
       - app-vol:/root
       - type: bind
