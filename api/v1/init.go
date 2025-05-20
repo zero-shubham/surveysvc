@@ -23,6 +23,10 @@ func NewApiV1Service(rgc RouterGroupCreator, conn db.DBTX, logger *zerolog.Logge
 
 	v1 := rgc.Group("/v1")
 	v1.POST("/question-mappings", v1Api.CreateQuestionMapping)
+	v1.GET("/question-mappings", v1Api.GetQuestionMappings)
+	v1.PATCH("/question-mappings/:id", v1Api.UpdateQuestionMapping)
+
+	v1.GET("/answers", v1Api.GetAnswers)
 
 	return &v1Api
 }

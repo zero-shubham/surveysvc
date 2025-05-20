@@ -40,15 +40,22 @@ func (svc *ApiV1Service) CreateQuestionMapping(c *gin.Context) {
 }
 
 type GetQuestionMappingsQuery struct {
-	CampaignID uuid.UUID `form:"campaign_id" binding:"required"`
-	Limit      int       `form:"limit"`
-	Offset     int       `form:"offset"`
+	CampaignID string `form:"campaign_id" binding:"required"`
+	Limit      int    `form:"limit"`
+	Offset     int    `form:"offset"`
 }
 
 func (svc *ApiV1Service) GetQuestionMappings(c *gin.Context) {
 	var query GetQuestionMappingsQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
+	if err := c.BindQuery(&query); err != nil {
 		svc.logger.Err(err).Msg("invalid query parameters")
+		c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
+		return
+	}
+
+	campaignID, err := uuid.Parse(query.CampaignID)
+	if err != nil {
+		svc.logger.Err(err).Msg("invalid campaign id")
 		c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
 		return
 	}
@@ -59,7 +66,7 @@ func (svc *ApiV1Service) GetQuestionMappings(c *gin.Context) {
 
 	orm := db.New(svc.conn)
 	mappings, err := orm.GetQuestionMappingsByCampaignID(c.Request.Context(), db.GetQuestionMappingsByCampaignIDParams{
-		CampaignID: query.CampaignID,
+		CampaignID: campaignID,
 		Limit:      int32(query.Limit),
 		Offset:     int32(query.Offset),
 	})
