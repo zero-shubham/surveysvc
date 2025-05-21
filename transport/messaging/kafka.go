@@ -39,6 +39,7 @@ func NewKafkaConsumer(
 			Topic:    topic,
 			GroupID:  consumerGroupID,
 			MaxBytes: 10e6,
+			Dialer:   tcp.NewInstrumentedDialer(time.Second*30, time.Minute*60, tracer).Dialer,
 		}),
 		handler: handler,
 		deadletter: kafka.NewWriter(kafka.WriterConfig{
