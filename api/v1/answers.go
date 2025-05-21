@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -42,9 +43,9 @@ func (svc *ApiV1Service) CreateAnswer(c *gin.Context) {
 }
 
 type GetAnswersQuery struct {
-	QuestionID uuid.UUID `form:"question_id" binding:"required"`
-	Limit      int       `form:"limit"`
-	Offset     int       `form:"offset"`
+	QuestionID string `form:"question_id" binding:"required"`
+	Limit      int    `form:"limit"`
+	Offset     int    `form:"offset"`
 }
 
 func (svc *ApiV1Service) GetAnswers(c *gin.Context) {
@@ -59,9 +60,16 @@ func (svc *ApiV1Service) GetAnswers(c *gin.Context) {
 		query.Limit = 10
 	}
 
+	questionID, err := uuid.Parse(query.QuestionID)
+	if err != nil {
+		svc.logger.Err(err).Msg("invalid question id")
+		c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
+		return
+	}
+
 	orm := db.New(svc.conn)
 	answers, err := orm.GetAnswersByQuestionID(c.Request.Context(), db.GetAnswersByQuestionIDParams{
-		QuestionID: query.QuestionID,
+		QuestionID: questionID,
 		Limit:      int32(query.Limit),
 		Offset:     int32(query.Offset),
 	})
