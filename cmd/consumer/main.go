@@ -64,10 +64,9 @@ func main() {
 		svc.HandleAnswer,
 		os.Getenv(KafkaDeadLetterEnv),
 		&log.Logger,
-		2,
 		tp,
 	)
-	consumer.Start(ctx)
+	consumer.Start(ctx, 2)
 
 	<-ctx.Done()
 

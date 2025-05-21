@@ -30,7 +30,6 @@ func NewKafkaConsumer(
 	handler HandlerFunc,
 	deadletterTopic string,
 	logger *zerolog.Logger,
-	workerCount int,
 	tp *sdktrace.TracerProvider,
 ) *KafkaConsumer {
 	tracer := tp.Tracer("surveysvc-consumer")
@@ -48,18 +47,18 @@ func NewKafkaConsumer(
 			Balancer: &kafka.LeastBytes{},
 			Dialer:   tcp.NewInstrumentedDialer(time.Second*30, time.Minute*60, tracer).Dialer,
 		}),
-		logger:      logger,
-		topic:       topic,
-		messageChan: make(chan *kafka.Message, workerCount),
-		trace:       tracer,
+		logger: logger,
+		topic:  topic,
+		trace:  tracer,
 	}
 
 }
 
-func (kh *KafkaConsumer) Start(ctx context.Context) {
+func (kh *KafkaConsumer) Start(ctx context.Context, workerCount int) {
 
-	for i := 0; i < len(kh.messageChan); i++ {
-		go kh.workerStart(ctx)
+	kh.messageChan = make(chan *kafka.Message, workerCount)
+	for i := 0; i < workerCount; i++ {
+		go kh.workerStart(ctx, i)
 	}
 
 	go func() {
@@ -72,13 +71,15 @@ func (kh *KafkaConsumer) Start(ctx context.Context) {
 				return
 
 			default:
-				ctx, span := kh.trace.Start(ctx, "fetch-answers")
+				kh.logger.Info().Msg("fetching message")
+				ctx, span := kh.trace.Start(ctx, "fetch-answer")
 				m, err := kh.reader.FetchMessage(ctx)
 				if err != nil {
-					kh.logger.Err(err).Msg("failed to fetch messages")
+					kh.logger.Err(err).Msg("failed to fetch message")
 					continue
 				}
 
+				kh.logger.Info().Msg("fetched message")
 				for _, header := range m.Headers {
 					span.SetAttributes(attribute.KeyValue{
 						Key:   attribute.Key(header.Key),
@@ -105,7 +106,7 @@ func (kh *KafkaConsumer) Stop() {
 	kh.logger.Info().Msg("stopped kafka handler")
 }
 
-func (kh *KafkaConsumer) workerStart(ctx context.Context) {
+func (kh *KafkaConsumer) workerStart(ctx context.Context, id int) {
 	kh.logger.Info().Msg("starting consumer worker")
 	for {
 		select {
@@ -115,10 +116,18 @@ func (kh *KafkaConsumer) workerStart(ctx context.Context) {
 
 		case m := <-kh.messageChan:
 			ctx, _ := kh.trace.Start(ctx, "process-answer")
+			kh.logger.Info().Msgf("message received on worker %d", id)
+
 			err := ExponentialRetry(3, func() error {
-				return kh.handler(ctx, m)
+				err := kh.handler(ctx, m)
+				if err != nil {
+					kh.logger.Err(err).Msg("failure from message handler, retrying..")
+				}
+
+				return err
 			})
 			if err != nil {
+				kh.logger.Err(err).Msg("failed to process message")
 				ctx, _ := kh.trace.Start(ctx, "dead-answer")
 				err = kh.deadletter.WriteMessages(ctx, *m)
 				if err != nil {

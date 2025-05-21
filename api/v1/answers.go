@@ -43,14 +43,18 @@ func (svc *ApiV1Service) CreateAnswer(c *gin.Context) {
 }
 
 type GetAnswersQuery struct {
-	QuestionID string `form:"question_id" binding:"required"`
+	QuestionID string `form:"question_id"`
 	Limit      int    `form:"limit"`
 	Offset     int    `form:"offset"`
 }
 
+type GetAnswersResp struct {
+	Answers []db.Answer `json:"answers"`
+}
+
 func (svc *ApiV1Service) GetAnswers(c *gin.Context) {
 	var query GetAnswersQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
+	if err := c.BindQuery(&query); err != nil {
 		c.JSON(400, gin.H{"error": "invalid query parameters"})
 		return
 	}
@@ -60,23 +64,40 @@ func (svc *ApiV1Service) GetAnswers(c *gin.Context) {
 		query.Limit = 10
 	}
 
-	questionID, err := uuid.Parse(query.QuestionID)
-	if err != nil {
-		svc.logger.Err(err).Msg("invalid question id")
-		c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
-		return
-	}
-
 	orm := db.New(svc.conn)
-	answers, err := orm.GetAnswersByQuestionID(c.Request.Context(), db.GetAnswersByQuestionIDParams{
-		QuestionID: questionID,
-		Limit:      int32(query.Limit),
-		Offset:     int32(query.Offset),
-	})
-	if err != nil {
-		c.JSON(500, gin.H{"error": "failed to fetch answers"})
-		return
+	var answersResp GetAnswersResp
+
+	if query.QuestionID == "" {
+		answers, err := orm.GetAnswers(c.Request.Context(), db.GetAnswersParams{
+			Offset: int32(query.Offset),
+			Limit:  int32(query.Limit),
+		})
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to fetch answers"})
+			return
+		}
+
+		answersResp.Answers = answers
+	} else {
+		questionID, err := uuid.Parse(query.QuestionID)
+		if err != nil {
+			svc.logger.Err(err).Msg("invalid question id")
+			c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
+			return
+		}
+
+		answers, err := orm.GetAnswersByQuestionID(c.Request.Context(), db.GetAnswersByQuestionIDParams{
+			QuestionID: questionID,
+			Limit:      int32(query.Limit),
+			Offset:     int32(query.Offset),
+		})
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to fetch answers"})
+			return
+		}
+
+		answersResp.Answers = answers
 	}
 
-	c.JSON(200, answers)
+	c.JSON(200, answersResp)
 }

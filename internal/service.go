@@ -42,7 +42,7 @@ func (s *Service) HandleAnswer(ctx context.Context, message *kafka.Message) erro
 
 	orm := db.New(s.conn)
 
-	_, err = orm.CreateAnswer(ctx, db.CreateAnswerParams{
+	answer, err := orm.CreateAnswer(ctx, db.CreateAnswerParams{
 		AnswerText: pgtype.Text{
 			String: mb.AnswerText,
 			Valid:  true,
@@ -59,6 +59,8 @@ func (s *Service) HandleAnswer(ctx context.Context, message *kafka.Message) erro
 		s.logger.Err(err).Msg("failed to create answer record")
 		return err
 	}
+
+	s.logger.Info().Str("answer_id", answer.ID.String()).Msg("successfully created answer record")
 
 	return nil
 }

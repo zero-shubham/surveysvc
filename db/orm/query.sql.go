@@ -82,6 +82,47 @@ func (q *Queries) CreateQuestionMapping(ctx context.Context, arg CreateQuestionM
 	return i, err
 }
 
+const getAnswers = `-- name: GetAnswers :many
+SELECT id, selected_option, answer_text, user_id, question_id, question_set_id, created_at, updated_at
+FROM answers
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type GetAnswersParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+func (q *Queries) GetAnswers(ctx context.Context, arg GetAnswersParams) ([]Answer, error) {
+	rows, err := q.db.Query(ctx, getAnswers, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Answer
+	for rows.Next() {
+		var i Answer
+		if err := rows.Scan(
+			&i.ID,
+			&i.SelectedOption,
+			&i.AnswerText,
+			&i.UserID,
+			&i.QuestionID,
+			&i.QuestionSetID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAnswersByQuestionID = `-- name: GetAnswersByQuestionID :many
 SELECT id, selected_option, answer_text, user_id, question_id, question_set_id, created_at, updated_at
 FROM answers 
