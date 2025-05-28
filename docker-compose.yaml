@@ -1,6 +1,64 @@
 version: '3.8'
 
 services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ['--config=/etc/otelcol-contrib/config.yaml']
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+      - oltpcol-vol:/conf/oltpcol
+      - type: bind
+        source: './'
+        target: '/conf/oltpcol'
+    environment:
+      - OTEL_EXPORTER_OTLP_TRACES_TIMEOUT=10s
+    ports:
+      - 1888:1888 # pprof extension
+      - 8888:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # zpages extension
+    depends_on:
+      - jaeger-server
+      - prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.9.3
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    environment:
+      - cluster.name=jaeger-cluster
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+  jaeger-server:
+    image: jaegertracing/all-in-one:latest
+    restart: on-failure
+    ports:
+      - 16686:16686
+    volumes:
+      - jaeger-vol:/jaeger
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+    command:
+      [
+        '--es.server-urls=http://elasticsearch:9200',
+        '--es.num-shards=1',
+        '--es.num-replicas=0',
+        '--log-level=error',
+      ]
+    depends_on:
+      - elasticsearch
   surveysvc-broker:
     image: apache/kafka:4.0.0
     volumes:
@@ -44,6 +102,7 @@ services:
       - KAFKA_CONSUMER_TOPIC=surveyx-answers
       - KAFKA_DEADLETTER_TOPIC=surveyx-answers-dead
       - KAFKA_CONSUMER_GROUP=surveyx-answers-consumers
+      - OLTP_HTTP_ENDPOINT=otel-collector:4318
     volumes:
       - app-vol:/root
       - type: bind
@@ -64,6 +123,7 @@ services:
     restart: always
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@surveysvc-db:5432/datab
+      - OLTP_HTTP_ENDPOINT=otel-collector:4318
     volumes:
       - app-vol:/root
       - type: bind
@@ -75,3 +135,6 @@ volumes:
   postgres_data:
   app-vol:
   kafka-data:
+  oltpcol-vol:
+  jaeger-vol:
+  esdata:

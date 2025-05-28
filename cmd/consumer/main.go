@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -22,6 +23,7 @@ const (
 	KafkaTopicConsumeEnv  = "KAFKA_CONSUMER_TOPIC"
 	KafkaDeadLetterEnv    = "KAFKA_DEADLETTER_TOPIC"
 	KafkaConsumerGroupEnv = "KAFKA_CONSUMER_GROUP"
+	OtelCollectorEnv      = "OLTP_HTTP_ENDPOINT"
 )
 
 func main() {
@@ -30,13 +32,17 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer stop()
 
-	tp, err := config.Init()
+	tp, mp, err := config.Init(ctx, os.Getenv(OtelCollectorEnv), config.ServiceName+"-consumer")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
 	defer func() {
 		if err := tp.Shutdown(ctx); err != nil {
 			log.Err(err).Msg("error shutting down tracer provider")
+		}
+
+		if err := mp.Shutdown(ctx); err != nil {
+			log.Err(err).Msg("error shutting down metric provider")
 		}
 	}()
 
@@ -45,6 +51,8 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create a config")
 	}
+
+	dbConfig.ConnConfig.Tracer = otelpgx.NewTracer(otelpgx.WithTracerProvider(tp))
 	dbConfig.MaxConns = MaxIdelConn
 	dbConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		pgxUUID.Register(conn.TypeMap())
@@ -53,18 +61,24 @@ func main() {
 
 	dbConn, err := pgxpool.NewWithConfig(ctx, dbConfig)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create a config")
+		log.Fatal().Err(err).Msg("Failed to db conn")
+	}
+
+	err = otelpgx.RecordStats(dbConn, otelpgx.WithStatsMeterProvider(mp))
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to add metrics to db")
 	}
 
 	svc := internal.NewService(&log.Logger, dbConn)
 	consumer := messaging.NewKafkaConsumer(
 		[]string{os.Getenv(KafkaBrokerEnv)},
 		os.Getenv(KafkaTopicConsumeEnv),
-		os.Getenv(KafkaConsumerGroupEnv),
+		os.Getenv(KafkaConsumerGroupEnv)+os.Getenv(messaging.PodNameEnv),
 		svc.HandleAnswer,
 		os.Getenv(KafkaDeadLetterEnv),
 		&log.Logger,
 		tp,
+		mp,
 	)
 	consumer.Start(ctx, 2)
 

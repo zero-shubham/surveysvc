@@ -13,6 +13,8 @@ import (
 	"github.com/zero-shubham/surveysvc/config"
 	db "github.com/zero-shubham/surveysvc/db/orm"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Router struct {
@@ -38,8 +40,14 @@ func (r *Router) ErrorHandler(c *gin.Context) {
 
 }
 
-func (r *Router) Start(ctx context.Context) {
-	r.server.Use(otelgin.Middleware(config.ServiceName))
+func (r *Router) Start(ctx context.Context, tp trace.TracerProvider, mp metric.MeterProvider) {
+	r.server.Use(
+		otelgin.Middleware(
+			config.ServiceName,
+			otelgin.WithTracerProvider(tp),
+			otelgin.WithMeterProvider(mp),
+		),
+	)
 
 	v1.NewApiV1Service(r.server, r.conn, r.logger)
 
