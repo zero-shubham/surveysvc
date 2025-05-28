@@ -59,7 +59,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to db conn")
 	}
 
-	err = otelpgx.RecordStats(dbConn)
+	err = otelpgx.RecordStats(dbConn, otelpgx.WithStatsMeterProvider(mp))
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to add metrics to db")
 	}

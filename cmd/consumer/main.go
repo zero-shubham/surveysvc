@@ -80,9 +80,8 @@ func main() {
 		os.Getenv(KafkaDeadLetterEnv),
 		&log.Logger,
 		tp,
-		mp,
 	)
-	consumer.Start(ctx, 2)
+	consumer.Start(ctx, 2, mp)
 
 	<-ctx.Done()
 

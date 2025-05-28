@@ -7,10 +7,10 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/segmentio/kafka-go"
+	"github.com/zero-shubham/surveysvc/config"
 	"github.com/zero-shubham/surveysvc/transport/tcp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -26,7 +26,6 @@ type KafkaConsumer struct {
 	topic       string
 	messageChan chan *kafka.Message
 	trace       trace.Tracer
-	meter       metric.Meter
 }
 
 func NewKafkaConsumer(
@@ -37,12 +36,10 @@ func NewKafkaConsumer(
 	deadletterTopic string,
 	logger *zerolog.Logger,
 	tp *sdktrace.TracerProvider,
-	mp *sdkmetric.MeterProvider,
 ) *KafkaConsumer {
 	logger.Info().Str("consumer_group", consumerGroupID).Msg("instantiating new consumer")
 
-	tracer := tp.Tracer("surveysvc-consumer" + os.Getenv(PodNameEnv))
-	meter := mp.Meter("surveysvc-consumer" + os.Getenv(PodNameEnv))
+	tracer := tp.Tracer(config.ServiceName + "-consumer-" + os.Getenv(PodNameEnv))
 
 	dialer := tcp.NewInstrumentedDialer(time.Second*30, time.Minute*60, tracer, logger)
 
@@ -64,19 +61,20 @@ func NewKafkaConsumer(
 		logger: logger,
 		topic:  topic,
 		trace:  tracer,
-		meter:  meter,
 	}
 
 }
 
-func (kh *KafkaConsumer) Start(ctx context.Context, workerCount int) {
+func (kh *KafkaConsumer) Start(ctx context.Context, workerCount int, mp metric.MeterProvider) {
+
+	meter := mp.Meter(config.ServiceName + "-consumer-" + os.Getenv(PodNameEnv))
 
 	kh.messageChan = make(chan *kafka.Message, workerCount)
 	for i := 0; i < workerCount; i++ {
 		go kh.workerStart(ctx, i)
 	}
 
-	msgCounter, err := kh.meter.Int64Counter(
+	msgCounter, err := meter.Int64Counter(
 		"message_counter",
 		metric.WithDescription("Counts the  total messages read"),
 		metric.WithUnit("1"),
@@ -113,7 +111,7 @@ func (kh *KafkaConsumer) Start(ctx context.Context, workerCount int) {
 						Value: attribute.StringValue(string(header.Value)),
 					})
 				}
-				msgCounter.Add(ctx, 1, metric.WithAttributes(otelAttrs...))
+				msgCounter.Add(ctx, 1, metric.WithAttributes(attribute.Float64("timestamp", float64(time.Now().Unix()))))
 
 				span.SetAttributes(otelAttrs...)
 
