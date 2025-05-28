@@ -13,6 +13,7 @@ import (
 	"github.com/zero-shubham/surveysvc/config"
 	db "github.com/zero-shubham/surveysvc/db/orm"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -41,12 +42,30 @@ func (r *Router) ErrorHandler(c *gin.Context) {
 }
 
 func (r *Router) Start(ctx context.Context, tp trace.TracerProvider, mp metric.MeterProvider) {
+
+	reqCounter, err := mp.Meter(config.ServiceName).Int64Counter(
+		"request_counter",
+		metric.WithDescription("Counts the  total requests processed"),
+		metric.WithUnit("1"),
+	)
+	if err != nil {
+		r.logger.Fatal().Err(err).Msg("failed to instantiate msg counter")
+	}
+
 	r.server.Use(
 		otelgin.Middleware(
 			config.ServiceName,
 			otelgin.WithTracerProvider(tp),
 			otelgin.WithMeterProvider(mp),
 		),
+
+		func(ctx *gin.Context) {
+			reqCounter.Add(ctx.Request.Context(), 1, metric.WithAttributes(attribute.KeyValue{
+				Key:   "path",
+				Value: attribute.StringValue(ctx.Request.URL.Path),
+			}))
+			ctx.Next()
+		},
 	)
 
 	v1.NewApiV1Service(r.server, r.conn, r.logger)

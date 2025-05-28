@@ -44,6 +44,8 @@ func main() {
 		if err := mp.Shutdown(ctx); err != nil {
 			log.Err(err).Msg("error shutting down metric provider")
 		}
+
+		log.Info().Msg("shutdown of tracer and meter complete")
 	}()
 
 	DB_URL := os.Getenv(DbUrlEnv)

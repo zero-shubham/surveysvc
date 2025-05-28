@@ -78,7 +78,7 @@ func (kh *KafkaConsumer) Start(ctx context.Context, workerCount int) {
 
 	msgCounter, err := kh.meter.Int64Counter(
 		"message_counter",
-		metric.WithDescription("Counts the  total messaged read"),
+		metric.WithDescription("Counts the  total messages read"),
 		metric.WithUnit("1"),
 	)
 	if err != nil {
@@ -97,7 +97,6 @@ func (kh *KafkaConsumer) Start(ctx context.Context, workerCount int) {
 			default:
 				kh.logger.Info().Msg("fetching message")
 				ctx, span := kh.trace.Start(ctx, "fetch-answer")
-				defer span.End()
 
 				m, err := kh.reader.FetchMessage(ctx)
 				if err != nil {
@@ -119,6 +118,7 @@ func (kh *KafkaConsumer) Start(ctx context.Context, workerCount int) {
 				span.SetAttributes(otelAttrs...)
 
 				kh.messageChan <- &m
+				span.End()
 			}
 		}
 	}()
@@ -147,7 +147,14 @@ func (kh *KafkaConsumer) workerStart(ctx context.Context, id int) {
 
 		case m := <-kh.messageChan:
 			ctx, span := kh.trace.Start(ctx, "process-answer")
-			defer span.End()
+			otelAttrs := make([]attribute.KeyValue, len(m.Headers))
+			for _, header := range m.Headers {
+				otelAttrs = append(otelAttrs, attribute.KeyValue{
+					Key:   attribute.Key(header.Key),
+					Value: attribute.StringValue(string(header.Value)),
+				})
+			}
+			span.SetAttributes(otelAttrs...)
 
 			kh.logger.Info().Msgf("message received on worker %d", id)
 
@@ -156,24 +163,27 @@ func (kh *KafkaConsumer) workerStart(ctx context.Context, id int) {
 				if err != nil {
 					kh.logger.Err(err).Msg("failure from message handler, retrying..")
 				}
-
 				return err
 			})
 			if err != nil {
 				kh.logger.Err(err).Msg("failed to process message")
 				ctx, span := kh.trace.Start(ctx, "dead-answer")
-				defer span.End()
 
 				err = kh.deadletter.WriteMessages(ctx, *m)
 				if err != nil {
 					kh.logger.Err(err).Msg("error while wrtiging to dead leader")
 				}
+
+				span.End()
 			}
 
-			ctx, _ = kh.trace.Start(ctx, "commit-answer")
+			ctx, commitSpan := kh.trace.Start(ctx, "commit-answer")
 			if err := kh.reader.CommitMessages(ctx, *m); err != nil {
 				kh.logger.Err(err).Msg("failed to commit messages")
 			}
+
+			commitSpan.End()
+			span.End()
 		}
 	}
 
