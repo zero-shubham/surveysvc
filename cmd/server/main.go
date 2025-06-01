@@ -64,7 +64,7 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to add metrics to db")
 	}
 
-	api.NewRouter(&log.Logger, dbConn).Start(ctx, tp, mp)
+	api.NewRouter(config.GetLogger(), dbConn).Start(ctx, tp, mp)
 	<-ctx.Done()
 
 }

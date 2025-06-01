@@ -81,7 +81,7 @@ func (svc *ApiV1Service) GetAnswers(c *gin.Context) {
 	} else {
 		questionID, err := uuid.Parse(query.QuestionID)
 		if err != nil {
-			svc.logger.Err(err).Msg("invalid question id")
+			svc.logger.Err(err).Ctx(c).Msg("invalid question id")
 			c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
 			return
 		}

@@ -71,14 +71,14 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to add metrics to db")
 	}
 
-	svc := internal.NewService(&log.Logger, dbConn)
+	svc := internal.NewService(config.GetLogger(), dbConn)
 	consumer := messaging.NewKafkaConsumer(
 		[]string{os.Getenv(KafkaBrokerEnv)},
 		os.Getenv(KafkaTopicConsumeEnv),
 		os.Getenv(KafkaConsumerGroupEnv)+os.Getenv(messaging.PodNameEnv),
 		svc.HandleAnswer,
 		os.Getenv(KafkaDeadLetterEnv),
-		&log.Logger,
+		config.GetLogger(),
 		tp,
 	)
 	consumer.Start(ctx, 2, mp)

@@ -60,7 +60,7 @@ func (s *Service) HandleAnswer(ctx context.Context, message *kafka.Message) erro
 		return err
 	}
 
-	s.logger.Info().Str("answer_id", answer.ID.String()).Msg("successfully created answer record")
+	s.logger.Info().Str("answer_id", answer.ID.String()).Ctx(ctx).Msg("successfully created answer record")
 
 	return nil
 }

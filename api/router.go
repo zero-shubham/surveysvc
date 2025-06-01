@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	v1 "github.com/zero-shubham/surveysvc/api/v1"
 	"github.com/zero-shubham/surveysvc/config"
@@ -55,15 +56,21 @@ func (r *Router) Start(ctx context.Context, tp trace.TracerProvider, mp metric.M
 	r.server.Use(
 		otelgin.Middleware(
 			config.ServiceName,
-			otelgin.WithTracerProvider(tp),
-			otelgin.WithMeterProvider(mp),
 		),
 
 		func(ctx *gin.Context) {
+			reqID := ctx.Request.Header.Get("X-Request-Id")
+			if reqID == "" {
+				reqID = uuid.NewString()
+			}
+
+			ctx.Set(config.CorrelationRequestID, reqID)
+
 			reqCounter.Add(ctx.Request.Context(), 1, metric.WithAttributes(attribute.KeyValue{
 				Key:   "path",
 				Value: attribute.StringValue(ctx.Request.URL.Path),
 			}))
+
 			ctx.Next()
 		},
 	)

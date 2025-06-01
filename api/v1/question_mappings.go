@@ -52,14 +52,14 @@ type GetQuestionMappingsResp struct {
 func (svc *ApiV1Service) GetQuestionMappings(c *gin.Context) {
 	var query GetQuestionMappingsQuery
 	if err := c.BindQuery(&query); err != nil {
-		svc.logger.Err(err).Msg("invalid query parameters")
+		svc.logger.Err(err).Ctx(c).Msg("invalid query parameters")
 		c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
 		return
 	}
 
 	campaignID, err := uuid.Parse(query.CampaignID)
 	if err != nil {
-		svc.logger.Err(err).Msg("invalid campaign id")
+		svc.logger.Err(err).Ctx(c).Msg("invalid campaign id")
 		c.AbortWithError(http.StatusBadRequest, errors.New("invalid query parameters"))
 		return
 	}
@@ -75,10 +75,12 @@ func (svc *ApiV1Service) GetQuestionMappings(c *gin.Context) {
 		Offset:     int32(query.Offset),
 	})
 	if err != nil {
-		svc.logger.Err(err).Msg("failed to get question mappings")
+		svc.logger.Err(err).Ctx(c).Msg("failed to get question mappings")
 		c.AbortWithError(http.StatusInternalServerError, errors.New("something went wrong"))
 		return
 	}
+
+	svc.logger.Info().Ctx(c).Msg("fetched question mappings")
 
 	c.JSON(http.StatusOK, GetQuestionMappingsResp{QuestionMappings: mappings})
 }
@@ -98,14 +100,14 @@ func (svc *ApiV1Service) UpdateQuestionMapping(c *gin.Context) {
 
 	var uri UpdateQuestionMappingURI
 	if err := c.ShouldBindUri(&uri); err != nil {
-		svc.logger.Err(err).Msg("invalid URI parameters")
+		svc.logger.Err(err).Ctx(c).Msg("invalid URI parameters")
 		c.AbortWithError(http.StatusBadRequest, errors.New("invalid question mapping ID"))
 		return
 	}
 
 	var in UpdateQuestionMappingBody
 	if err := c.BindJSON(&in); err != nil {
-		svc.logger.Err(err).Msg("failed to parse request body")
+		svc.logger.Err(err).Ctx(c).Msg("failed to parse request body")
 		c.AbortWithError(http.StatusBadRequest, errors.New("bad request body"))
 		return
 	}
@@ -117,7 +119,7 @@ func (svc *ApiV1Service) UpdateQuestionMapping(c *gin.Context) {
 		OrgID:      in.OrgID,
 	})
 	if err != nil {
-		svc.logger.Err(err).Msg("failed to update question_mapping")
+		svc.logger.Err(err).Ctx(c).Msg("failed to update question_mapping")
 		c.AbortWithError(http.StatusInternalServerError, errors.New("something went wrong"))
 		return
 	}
