@@ -1,0 +1,35 @@
+FROM golang:1.24-alpine3.22 AS deps
+
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+
+RUN go mod download && go mod verify
+
+FROM golang:1.24-alpine3.22 AS builder
+
+COPY --from=deps /go/pkg /go/pkg
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags "-s -w" -trimpath -o main /app/cmd/server
+
+FROM gcr.io/distroless/static:nonroot
+
+COPY --from=builder /app/main /main
+
+
+
+EXPOSE 50050
+EXPOSE 50051
+
+USER 65532:65532
+
+ENTRYPOINT ["/main"]
